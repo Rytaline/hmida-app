@@ -9,6 +9,7 @@ const FN = [
   { ic: "📚", lab: "Que sait-on déjà ?", q: "Knowledge Explorer : que savons-nous déjà sur l'eau et la souveraineté dans nos sources ? Cartographie ce qui est documenté." },
   { ic: "🕳", lab: "Nos angles morts", q: "Gap Detection : quels sont nos angles morts sur la souveraineté alimentaire — ce qu'on ne documente pas encore ?" },
   { ic: "♟", lab: "Conseil stratégique", q: "Strategic Advisor : devons-nous lancer la collection « Ressources stratégiques » ? Opportunités, risques, alignement avec la doctrine." },
+  { ic: "✨", lab: "Inspiration", q: "Raconte-moi une histoire vraie et inspirante d'un grand artiste, penseur ou créateur — je veux me détendre et me remettre en mouvement.", mode: "inspiration" },
 ];
 
 function esc(s) {
@@ -23,21 +24,41 @@ function mdToHtml(t) {
       .replace(/\*\*(.+?)\*\*/g, "<b>$1</b>")
       .replace(/\*(.+?)\*/g, "<i>$1</i>")
       .replace(/`(.+?)`/g, "<b>$1</b>");
-  for (const raw of lines) {
-    const l = raw.trim();
+  const isRow = (s) => /^\|.*\|\s*$/.test(s);
+  const isSep = (s) => /^\|?[\s:|-]*-{2,}[\s:|-]*\|?$/.test(s) && s.includes("-");
+  const cells = (s) => s.replace(/^\s*\|/, "").replace(/\|\s*$/, "").split("|").map((c) => c.trim());
+  let i = 0;
+  while (i < lines.length) {
+    const l = lines[i].trim();
+    // Tableau Markdown : ligne | … | suivie d'une ligne séparatrice |---|
+    if (isRow(l) && i + 1 < lines.length && isSep(lines[i + 1].trim())) {
+      if (inList) { out.push("</ul>"); inList = false; }
+      const header = cells(l);
+      let j = i + 2;
+      const rows = [];
+      while (j < lines.length && isRow(lines[j].trim())) { rows.push(cells(lines[j].trim())); j++; }
+      let tbl = '<table><thead><tr>' + header.map((h) => "<th>" + inl(h) + "</th>").join("") + "</tr></thead><tbody>";
+      tbl += rows.map((r) => "<tr>" + r.map((c) => "<td>" + inl(c) + "</td>").join("") + "</tr>").join("");
+      tbl += "</tbody></table>";
+      out.push(tbl);
+      i = j;
+      continue;
+    }
+    if (/^-{3,}$/.test(l)) { if (inList) { out.push("</ul>"); inList = false; } out.push("<hr/>"); i++; continue; }
     if (/^#{1,4}\s+/.test(l)) {
       if (inList) { out.push("</ul>"); inList = false; }
       out.push("<h4>" + inl(l.replace(/^#{1,4}\s+/, "")) + "</h4>");
-      continue;
+      i++; continue;
     }
     if (/^[-•*]\s+/.test(l)) {
       if (!inList) { out.push("<ul>"); inList = true; }
       out.push("<li>" + inl(l.replace(/^[-•*]\s+/, "")) + "</li>");
-      continue;
+      i++; continue;
     }
     if (inList) { out.push("</ul>"); inList = false; }
-    if (!l) { out.push('<div class="sp"></div>'); continue; }
+    if (!l) { out.push('<div class="sp"></div>'); i++; continue; }
     out.push("<p>" + inl(l) + "</p>");
+    i++;
   }
   if (inList) out.push("</ul>");
   return out.join("");
@@ -62,6 +83,7 @@ export default function Hmida() {
   ]);
   const [q, setQ] = useState("");
   const [busy, setBusy] = useState(false);
+  const [quote, setQuote] = useState(null);
   const feedRef = useRef(null);
   const taRef = useRef(null);
 
@@ -69,11 +91,19 @@ export default function Hmida() {
     if (feedRef.current) feedRef.current.scrollTop = feedRef.current.scrollHeight;
   }, [msgs]);
 
+  // Citation inspirante générée par Claude, à chaque connexion
+  useEffect(() => {
+    fetch("/api/quote")
+      .then((r) => r.json())
+      .then((d) => { if (d && d.quote) setQuote(d); })
+      .catch(() => {});
+  }, []);
+
   function push(m) {
     setMsgs((prev) => [...prev, m]);
   }
 
-  async function ask(preset) {
+  async function ask(preset, mode) {
     const text = (preset || q || "").trim();
     if (!text || busy) return;
     setBusy(true);
@@ -95,7 +125,7 @@ export default function Hmida() {
       const r = await fetch("/api/hmida", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ q: text, history }),
+        body: JSON.stringify({ q: text, history, mode: mode || "" }),
       });
       const j = await r.json().catch(() => ({}));
       if (!r.ok) {
@@ -171,6 +201,13 @@ export default function Hmida() {
       </header>
 
       <div className="feed" ref={feedRef}>
+        {quote && (
+          <div className="quote">
+            <span className="q-mark">“</span>
+            <span className="q-text">{quote.quote}</span>
+            <span className="q-author">— {quote.author}</span>
+          </div>
+        )}
         {msgs.map((m, i) => (
           <div key={i} className={"msg " + m.who}>
             {m.who === "h" && <div className="av">✦ HMIDA</div>}
@@ -235,7 +272,7 @@ export default function Hmida() {
         </div>
         <div className="sugg">
           {FN.map((f, i) => (
-            <button key={i} onClick={() => ask(f.q)}>
+            <button key={i} onClick={() => ask(f.q, f.mode)}>
               <span>{f.ic}</span>
               {f.lab}
             </button>
