@@ -84,6 +84,9 @@ export default function Hmida() {
   const [q, setQ] = useState("");
   const [busy, setBusy] = useState(false);
   const [quote, setQuote] = useState(null);
+  const [joke, setJoke] = useState("");
+  const [urgent, setUrgent] = useState(null);
+  const [userName, setUserName] = useState("");
   const feedRef = useRef(null);
   const taRef = useRef(null);
 
@@ -91,12 +94,12 @@ export default function Hmida() {
     if (feedRef.current) feedRef.current.scrollTop = feedRef.current.scrollHeight;
   }, [msgs]);
 
-  // Citation inspirante générée par Claude, à chaque connexion
+  // À la connexion : citation + blague du jour + urgence du jour + prénom
   useEffect(() => {
-    fetch("/api/quote")
-      .then((r) => r.json())
-      .then((d) => { if (d && d.quote) setQuote(d); })
-      .catch(() => {});
+    try { setUserName(localStorage.getItem("hmida_name") || ""); } catch (_) {}
+    fetch("/api/quote").then((r) => r.json()).then((d) => { if (d && d.quote) setQuote(d); }).catch(() => {});
+    fetch("/api/joke").then((r) => r.json()).then((d) => { if (d && d.joke) setJoke(d.joke); }).catch(() => {});
+    fetch("/api/urgent").then((r) => r.json()).then((d) => { if (d && Array.isArray(d.items)) setUrgent(d); }).catch(() => {});
   }, []);
 
   function push(m) {
@@ -201,6 +204,20 @@ export default function Hmida() {
       </header>
 
       <div className="feed" ref={feedRef}>
+        {urgent && urgent.items && urgent.items.length > 0 && (
+          <div className="urgent">
+            <div className="urgent-head">🔥 Urgence du jour</div>
+            <ul>
+              {urgent.items.map((it, i) => (
+                <li key={i}>
+                  <b>{it.t || "—"}</b>
+                  {it.who ? <span className="u-meta"> · {it.who}</span> : null}
+                  {it.when ? <span className="u-meta"> · {it.when}</span> : null}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
         {quote && (
           <div className="quote">
             <span className="q-mark">“</span>
@@ -208,6 +225,7 @@ export default function Hmida() {
             <span className="q-author">— {quote.author}</span>
           </div>
         )}
+        {joke && <div className="joke">✦ {joke}</div>}
         {msgs.map((m, i) => (
           <div key={i} className={"msg " + m.who}>
             {m.who === "h" && <div className="av">✦ HMIDA</div>}
