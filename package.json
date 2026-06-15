@@ -1,0 +1,18 @@
+{
+  "name": "hmida-app",
+  "version": "1.0.0",
+  "private": true,
+  "description": "HMIDA — moteur de Sense Making TELL'R. App publique (porte 6767), Notion + Claude côté serveur. Next.js / Vercel.",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.32.1",
+    "@notionhq/client": "^2.2.15",
+    "next": "14.2.15",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  }
+}
