@@ -34,17 +34,27 @@ Termine TOUJOURS par une seule ligne d'**humour sec** en italique — une pique,
 
 TABLEAU DE BORD : si un « TABLEAU DE BORD (live) » est fourni, c'est l'état réel des bases TELL'R (tâches en retard, échéances, RACI, publications, VIDEO PIPELINE, projets). Utilise-le pour répondre PRÉCISÉMENT aux questions de pilotage (« quoi en retard », « qui valide quoi », « quoi publier cette semaine ») : cite les lignes exactes, les responsables et les dates. Ne dis jamais que tu n'as pas accès aux tâches si ce tableau est présent.
 
-SOURCES : appuie-toi EN PRIORITÉ sur les extraits Notion fournis et nomme les documents utilisés dans le corps. Si tu complètes avec ta compréhension, signale-le brièvement. Français, précis, markdown léger.`;
+SOURCES : appuie-toi EN PRIORITÉ sur les extraits Notion fournis et nomme les documents utilisés dans le corps. Si tu complètes avec ta compréhension, signale-le brièvement.
+
+CHIFFRES & FAITS (règle non négociable — c'est la doctrine TELL'R) : ne donne JAMAIS un chiffre, une date, un seuil, un pourcentage ou une statistique précise sans source. Si la donnée vient d'un extrait Notion, nomme le document. Sinon, marque-la explicitement **(à vérifier)**. Tu n'as pas le droit d'avoir l'assurance d'un expert sans la source : mieux vaut « de l'ordre de X (à vérifier) » qu'un faux précis qui serait publié tel quel. Si tu ne sais pas, dis-le.
+
+Français, précis, markdown léger.`;
+
+const SYS_INSPIRATION = `Tu es Hmida, en MODE INSPIRATION. Ici tu poses l'analyse : tu deviens un conteur, chaleureux et apaisant. Raconte UNE histoire vraie et inspirante autour d'un grand artiste, écrivain, penseur, scientifique ou créateur réel (varie les figures, les cultures, les époques). Montre l'obstacle ou le doute, le moment de bascule, et ce qu'on en retient pour créer avec intention. Ton doux, rythme lent, comme une histoire qu'on écoute le soir. 200-300 mots, prose fluide, sans titres ni jargon ni listes. Reste fidèle aux faits : pas de citations ni de dates inventées. Termine par une seule phrase douce qui donne envie de s'y remettre. Français.`;
 
 export async function POST(req) {
   let q = "";
   let history = [];
+  let mode = "";
   try {
     const body = await req.json();
     q = (body && body.q ? String(body.q) : "").trim();
     if (body && Array.isArray(body.history)) history = body.history;
+    if (body && body.mode) mode = String(body.mode);
   } catch (_) {}
   if (!q) return NextResponse.json({ error: "Question vide." }, { status: 400 });
+
+  const inspiration = mode === "inspiration";
 
   // Historique de conversation (multi-tours) : on garde les 8 derniers messages.
   const prior = history
@@ -56,20 +66,26 @@ export async function POST(req) {
     return NextResponse.json({ error: "ANTHROPIC_API_KEY manquante côté serveur." }, { status: 500 });
   }
 
-  // 1) Lecture Notion : tableau de bord structuré (tâches/RACI/calendrier/vidéo/projets) + recherche sémantique
+  // 1) Lecture Notion : tableau de bord structuré + recherche sémantique, EN PARALLÈLE
+  //    (sautée en mode inspiration : on raconte une histoire, pas les données)
   let sources = [];
   let context = "";
-  let dash = "";
-  try {
-    dash = await buildDashboard(q);
-  } catch (_) {}
-  try {
-    sources = await notionSearch(q, 6);
-    const parts = [];
-    for (const s of sources.slice(0, 3)) {
-      const txt = await notionPageText(s.id, 1500);
-      if (txt) parts.push(`${s.title} :\n${txt}`);
-    }
+  if (!inspiration) try {
+    // Dashboard et recherche lancés en même temps
+    const [dash, searchResults] = await Promise.all([
+      buildDashboard(q).catch(() => ""),
+      notionSearch(q, 6).catch(() => []),
+    ]);
+    sources = searchResults;
+    // Lecture des 3 premières pages en parallèle
+    const fetched = await Promise.all(
+      sources.slice(0, 3).map((s) =>
+        notionPageText(s.id, 1500)
+          .then((txt) => (txt ? `${s.title} :\n${txt}` : ""))
+          .catch(() => "")
+      )
+    );
+    const parts = fetched.filter(Boolean);
     const blocks = [];
     if (dash) blocks.push(dash);
     if (parts.length) blocks.push("CONTEXTE (Notion) :\n" + parts.join("\n\n"));
@@ -81,9 +97,10 @@ export async function POST(req) {
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
     const msg = await anthropic.messages.create({
       model: process.env.ANTHROPIC_MODEL || "claude-sonnet-4-6",
-      max_tokens: 1600,
-      system: SYS,
-      messages: [...prior, { role: "user", content: context + "QUESTION : " + q }],
+      max_tokens: inspiration ? 1000 : 1600,
+      temperature: inspiration ? 1 : 0.7,
+      system: inspiration ? SYS_INSPIRATION : SYS,
+      messages: [...prior, { role: "user", content: context + (inspiration ? q : "QUESTION : " + q) }],
     });
     const answer = (msg.content || []).map((b) => (b.type === "text" ? b.text : "")).join("").trim();
     return NextResponse.json({
