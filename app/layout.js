@@ -9,7 +9,7 @@ export default function RootLayout({ children }) {
       <head>
         <meta name="color-scheme" content="light" />
         <link
-          href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap"
+          href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,500;1,600&family=Inter:wght@300;400;500;600&display=swap"
           rel="stylesheet"
         />
       </head>

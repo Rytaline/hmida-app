@@ -131,7 +131,7 @@ export default function Hmida() {
       if (!r.ok) {
         replaceLast({ who: "h", html: '<span style="color:var(--soft)">' + esc(j.error || "Erreur.") + "</span>" });
       } else {
-        replaceLast({ who: "h", raw: j.answer, html: mdToHtml(j.answer), sources: j.sources || [], q: text, notionUsed: j.notionUsed });
+        replaceLast({ who: "h", raw: j.answer, html: mdToHtml(j.answer), sources: j.sources || [], q: text, notionUsed: mode === "inspiration" ? true : j.notionUsed });
       }
     } catch (_) {
       replaceLast({ who: "h", html: '<span style="color:var(--soft)">Erreur réseau. Réessaie.</span>' });
