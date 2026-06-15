@@ -4,6 +4,7 @@ import "../globals.css";
 
 export default function Login() {
   const [code, setCode] = useState("");
+  const [name, setName] = useState("");
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -19,6 +20,7 @@ export default function Login() {
         body: JSON.stringify({ code }),
       });
       if (r.ok) {
+        try { localStorage.setItem("hmida_name", name.trim()); } catch (_) {}
         window.location.href = "/";
       } else {
         const j = await r.json().catch(() => ({}));
@@ -42,14 +44,21 @@ export default function Login() {
         <h1>HMIDA</h1>
         <div className="sub">Moteur de Sense Making · TELL'R</div>
         <input
-          inputMode="numeric"
+          className="gate-name"
           autoFocus
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Ton prénom"
+          aria-label="Ton prénom"
+        />
+        <input
+          inputMode="numeric"
           value={code}
           onChange={(e) => setCode(e.target.value)}
-          placeholder="• • • •"
+          placeholder="• • • •  (code)"
           aria-label="Code d'accès"
         />
-        <button type="submit" disabled={busy || !code}>
+        <button type="submit" disabled={busy || !code || !name.trim()}>
           {busy ? "Vérification…" : "Entrer"}
         </button>
         <div className="gate-err">{err}</div>
