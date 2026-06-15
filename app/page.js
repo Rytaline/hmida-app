@@ -87,6 +87,7 @@ export default function Hmida() {
   const [joke, setJoke] = useState("");
   const [urgent, setUrgent] = useState(null);
   const [userName, setUserName] = useState("");
+  const [speaker, setSpeaker] = useState("");
   const feedRef = useRef(null);
   const taRef = useRef(null);
 
@@ -96,7 +97,7 @@ export default function Hmida() {
 
   // À la connexion : citation + blague du jour + urgence du jour + prénom
   useEffect(() => {
-    try { setUserName(localStorage.getItem("hmida_name") || ""); } catch (_) {}
+    try { const nm = localStorage.getItem("hmida_name") || ""; setUserName(nm); setSpeaker(nm); } catch (_) {}
     fetch("/api/quote").then((r) => r.json()).then((d) => { if (d && d.quote) setQuote(d); }).catch(() => {});
     fetch("/api/joke").then((r) => r.json()).then((d) => { if (d && d.joke) setJoke(d.joke); }).catch(() => {});
     fetch("/api/urgent").then((r) => r.json()).then((d) => { if (d && Array.isArray(d.items)) setUrgent(d); }).catch(() => {});
@@ -110,7 +111,8 @@ export default function Hmida() {
     const text = (preset || q || "").trim();
     if (!text || busy) return;
     setBusy(true);
-    push({ who: "u", text });
+    const who = (speaker || "").trim();
+    push({ who: "u", text, speaker: who });
     setQ("");
     if (taRef.current) taRef.current.style.height = "auto";
 
@@ -121,14 +123,15 @@ export default function Hmida() {
     // Historique pour la mémoire de conversation (on exclut l'accueil et le message en cours).
     const history = msgs
       .filter((m) => !m.loading && (m.who === "u" ? m.text : m.raw))
-      .map((m) => ({ role: m.who === "u" ? "user" : "assistant", content: m.who === "u" ? m.text : m.raw }))
+      .map((m) => ({ role: m.who === "u" ? "user" : "assistant", content: m.who === "u" ? ((m.speaker ? m.speaker + " : " : "") + m.text) : m.raw }))
       .slice(-8);
+    const apiQ = who ? who + " : " + text : text;
 
     try {
       const r = await fetch("/api/hmida", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ q: text, history, mode: mode || "" }),
+        body: JSON.stringify({ q: apiQ, history, mode: mode || "" }),
       });
       const j = await r.json().catch(() => ({}));
       if (!r.ok) {
@@ -230,7 +233,10 @@ export default function Hmida() {
           <div key={i} className={"msg " + m.who}>
             {m.who === "h" && <div className="av">✦ HMIDA</div>}
             {m.who === "u" ? (
-              <span>{m.text}</span>
+              <>
+                {m.speaker ? <div className="speaker-tag">{m.speaker}</div> : null}
+                <span>{m.text}</span>
+              </>
             ) : m.loading ? (
               <span style={{ color: "var(--soft)" }}>
                 <span className="spin"></span> Je relie et structure…
@@ -268,6 +274,10 @@ export default function Hmida() {
       </div>
 
       <div className="footer">
+        <div className="speaker-row">
+          <span>✍ qui écrit&nbsp;:</span>
+          <input value={speaker} onChange={(e) => setSpeaker(e.target.value)} placeholder="prénom" aria-label="Qui écrit" />
+        </div>
         <div className="bar">
           <textarea
             ref={taRef}
