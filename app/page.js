@@ -320,7 +320,7 @@ export default function Hmida() {
           </svg>
         </div>
         <div className="htxt">
-          <b>HMIDA 2.0</b>
+          <b>HMIDA 2.1</b>
           <div className="sub">Cerveau opérant · TELL'R</div>
         </div>
         <div className="vtabs">
