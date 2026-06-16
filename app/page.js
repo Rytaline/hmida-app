@@ -247,6 +247,7 @@ export default function Hmida() {
           <div className="sub">Votre compagnon TELL'R · Sense Making</div>
         </div>
         <span className="mode" style={{ marginLeft: "auto" }}>● Notion + Claude</span>
+        <a className="hbtn" href="/bibliotheque" title="Bibliothèque : 80 articles, vidéos et rapports classés">📚 Articles</a>
         <button className={"hbtn" + (convo ? " active" : "")} onClick={toggleConvo} title="Mode conversation mains libres (Hmida lit et t'écoute)">🎙️ {convo ? "Conversation ON" : "Conversation"}</button>
         <button className="hbtn" onClick={() => { try { window.speechSynthesis && window.speechSynthesis.cancel(); } catch (_) {} setMsgs(msgs.slice(0, 1)); }} title="Nouvelle conversation">🗑</button>
         <button className="hbtn" onClick={logout} title="Se déconnecter">Quitter</button>
