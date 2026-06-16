@@ -88,8 +88,12 @@ export default function Hmida() {
   const [urgent, setUrgent] = useState(null);
   const [userName, setUserName] = useState("");
   const [speaker, setSpeaker] = useState("");
+  const [listening, setListening] = useState(false);
+  const [convo, setConvo] = useState(false);
   const feedRef = useRef(null);
   const taRef = useRef(null);
+  const recRef = useRef(null);
+  const convoRef = useRef(false);
 
   useEffect(() => {
     if (feedRef.current) feedRef.current.scrollTop = feedRef.current.scrollHeight;
@@ -138,6 +142,7 @@ export default function Hmida() {
         replaceLast({ who: "h", html: '<span style="color:var(--soft)">' + esc(j.error || "Erreur.") + "</span>" });
       } else {
         replaceLast({ who: "h", raw: j.answer, html: mdToHtml(j.answer), sources: j.sources || [], q: text, notionUsed: mode === "inspiration" ? true : j.notionUsed });
+        if (convoRef.current) speak(j.answer, () => { if (convoRef.current) startListening(); });
       }
     } catch (_) {
       replaceLast({ who: "h", html: '<span style="color:var(--soft)">Erreur réseau. Réessaie.</span>' });
@@ -158,6 +163,46 @@ export default function Hmida() {
     const b = e.currentTarget;
     b.textContent = "✓ Copié";
     setTimeout(() => (b.textContent = "⧉ Copier"), 1400);
+  }
+
+  // ── Voix : Hmida lit ses réponses (TTS) et t'écoute (STT) ──
+  function speak(text, then) {
+    try {
+      const synth = window.speechSynthesis;
+      if (!synth) { if (then) then(); return; }
+      synth.cancel();
+      const clean = (text || "").replace(/[#*`>_|]/g, " ").replace(/\s+/g, " ").trim().slice(0, 1400);
+      const u = new SpeechSynthesisUtterance(clean);
+      u.lang = "fr-FR"; u.rate = 1.03;
+      if (then) u.onend = then;
+      synth.speak(u);
+    } catch (_) { if (then) then(); }
+  }
+
+  function startListening() {
+    const SR = typeof window !== "undefined" && (window.SpeechRecognition || window.webkitSpeechRecognition);
+    if (!SR) { alert("La dictée vocale n'est pas disponible sur ce navigateur — essaie Chrome."); return; }
+    try {
+      const rec = new SR();
+      recRef.current = rec;
+      rec.lang = "fr-FR"; rec.interimResults = false; rec.maxAlternatives = 1;
+      setListening(true);
+      rec.onresult = (e) => { const tr = e.results[0][0].transcript; setListening(false); if (tr && tr.trim()) ask(tr); };
+      rec.onerror = () => setListening(false);
+      rec.onend = () => setListening(false);
+      rec.start();
+    } catch (_) { setListening(false); }
+  }
+
+  function toggleMic() {
+    if (listening) { try { recRef.current && recRef.current.stop(); } catch (_) {} setListening(false); }
+    else { try { window.speechSynthesis && window.speechSynthesis.cancel(); } catch (_) {} startListening(); }
+  }
+
+  function toggleConvo() {
+    const next = !convo;
+    setConvo(next); convoRef.current = next;
+    if (!next) { try { window.speechSynthesis && window.speechSynthesis.cancel(); } catch (_) {} }
   }
 
   async function createDoc(target, m, e) {
@@ -202,7 +247,8 @@ export default function Hmida() {
           <div className="sub">Votre compagnon TELL'R · Sense Making</div>
         </div>
         <span className="mode" style={{ marginLeft: "auto" }}>● Notion + Claude</span>
-        <button className="hbtn" onClick={() => setMsgs(msgs.slice(0, 1))} title="Nouvelle conversation">🗑</button>
+        <button className={"hbtn" + (convo ? " active" : "")} onClick={toggleConvo} title="Mode conversation mains libres (Hmida lit et t'écoute)">🎙️ {convo ? "Conversation ON" : "Conversation"}</button>
+        <button className="hbtn" onClick={() => { try { window.speechSynthesis && window.speechSynthesis.cancel(); } catch (_) {} setMsgs(msgs.slice(0, 1)); }} title="Nouvelle conversation">🗑</button>
         <button className="hbtn" onClick={logout} title="Se déconnecter">Quitter</button>
       </header>
 
@@ -257,6 +303,7 @@ export default function Hmida() {
                 {m.raw && (
                   <div className="acts">
                     <button onClick={(e) => copyMsg(e, m.raw)}>⧉ Copier</button>
+                    <button onClick={() => speak(m.raw)}>🔊 Écouter</button>
                     <button onClick={() => ask(m.q)}>↻ Régénérer</button>
                     <span className="acts-sep">·  créer :</span>
                     <button onClick={(e) => createDoc("video", m, e)}>🎬 Vidéo</button>
@@ -296,6 +343,7 @@ export default function Hmida() {
               }
             }}
           />
+          <button className={"mic" + (listening ? " on" : "")} onClick={toggleMic} title="Parler à Hmida">{listening ? "●" : "🎤"}</button>
           <button className="send" disabled={busy} onClick={() => ask()}>↑</button>
         </div>
         <div className="sugg">
