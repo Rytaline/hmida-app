@@ -153,3 +153,16 @@ header{background:var(--bg);color:var(--ink);padding:16px 26px;display:flex;alig
 .mtab:hover{border-color:var(--accent);color:var(--accent);}
 .mtab.on{background:var(--accent);border-color:var(--accent);color:var(--bg);}
 .mode-pill{margin-left:auto;font-size:.7rem;color:var(--accent);border:1px solid var(--border);border-radius:999px;padding:3px 10px;}
+
+/* ── 2.1 : Daily → Notion ── */
+.daily-intro{color:var(--soft);font-size:.9rem;line-height:1.6;margin-bottom:14px;max-width:680px;}
+.daily-ta{width:100%;min-height:180px;border:1px solid var(--border);border-radius:12px;padding:14px 16px;font:inherit;font-size:.95rem;line-height:1.6;background:var(--surface);color:var(--ink);outline:none;resize:vertical;}
+.daily-ta:focus{border-color:var(--accent);}
+.daily-actions{display:flex;gap:10px;align-items:center;margin:14px 0;flex-wrap:wrap;}
+.daily-go{border:none;background:var(--accent);color:var(--bg);border-radius:10px;padding:11px 20px;font-size:.9rem;cursor:pointer;transition:background .2s;}
+.daily-go:hover{background:var(--accent-deep);}.daily-go:disabled{opacity:.45;cursor:default;}
+.daily-clear{border:1px solid var(--border);background:transparent;color:var(--soft);border-radius:10px;padding:11px 16px;font-size:.84rem;cursor:pointer;}
+.daily-res{margin-top:10px;}
+.daily-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--border);border-radius:9px;background:var(--surface);margin-bottom:8px;animation:fadeUp .3s ease both;}
+.daily-type{font-size:.62rem;letter-spacing:.06em;text-transform:uppercase;color:var(--accent);font-weight:700;flex:none;width:74px;}
+.daily-titre{flex:1;font-size:.88rem;color:var(--ink);}

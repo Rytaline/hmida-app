@@ -109,6 +109,10 @@ export default function Hmida() {
   const [speaker, setSpeaker] = useState("");
   const [listening, setListening] = useState(false);
   const [convo, setConvo] = useState(false);
+  const [daily, setDaily] = useState("");
+  const [dailyBusy, setDailyBusy] = useState(false);
+  const [dailyRes, setDailyRes] = useState(null);
+  const [dailyListening, setDailyListening] = useState(false);
   const feedRef = useRef(null);
   const taRef = useRef(null);
   const recRef = useRef(null);
@@ -220,9 +224,50 @@ export default function Hmida() {
     if (!next) { try { window.speechSynthesis && window.speechSynthesis.cancel(); } catch (_) {} }
   }
 
+  // ── Daily : capter une réunion → décisions + tâches dans Notion ──
+  async function captureDaily() {
+    if (!daily.trim() || dailyBusy) return;
+    setDailyBusy(true); setDailyRes(null);
+    try {
+      const r = await fetch("/api/hmida/meeting", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ transcript: daily }),
+      });
+      const j = await r.json().catch(() => ({}));
+      setDailyRes(r.ok ? j : { error: j.error || "Erreur." });
+    } catch (_) {
+      setDailyRes({ error: "Erreur réseau." });
+    }
+    setDailyBusy(false);
+  }
+
+  function dictateDaily() {
+    const SR = typeof window !== "undefined" && (window.SpeechRecognition || window.webkitSpeechRecognition);
+    if (!SR) { alert("Dictée indisponible — essaie Chrome."); return; }
+    try {
+      const rec = new SR();
+      rec.lang = "fr-FR"; rec.interimResults = false; rec.continuous = true; rec.maxAlternatives = 1;
+      setDailyListening(true);
+      recRef.current = rec;
+      rec.onresult = (e) => {
+        let txt = "";
+        for (let i = e.resultIndex; i < e.results.length; i++) txt += e.results[i][0].transcript + " ";
+        setDaily((d) => (d ? d + " " : "") + txt.trim());
+      };
+      rec.onerror = () => setDailyListening(false);
+      rec.onend = () => setDailyListening(false);
+      rec.start();
+    } catch (_) { setDailyListening(false); }
+  }
+  function stopDictateDaily() {
+    try { recRef.current && recRef.current.stop(); } catch (_) {}
+    setDailyListening(false);
+  }
+
   async function createDoc(target, m, e) {
     const btn = e && e.currentTarget;
-    const labels = { brief: "📝 Brief", script: "🎬 Script", tache: "✅ Tâche", decision: "🧠 Décision" };
+    const labels = { brief: "📝 Brief", script: "🎬 Script", tache: "✅ Tâche", decision: "🧠 Décision", memoire: "💾 Mémoriser" };
     if (btn) btn.textContent = "…";
     let title = (m.q || (m.raw || "").split("\n")[0] || "Sans titre").trim();
     title = title.replace(/^[^:\n]{0,32}:\s*/, "").slice(0, 90);
@@ -281,6 +326,7 @@ export default function Hmida() {
         <div className="vtabs">
           <button className={"vtab" + (view === "cockpit" ? " on" : "")} onClick={() => setView("cockpit")}>◧ Cockpit</button>
           <button className={"vtab" + (view === "chat" ? " on" : "")} onClick={() => setView("chat")}>✦ Hmida</button>
+          <button className={"vtab" + (view === "daily" ? " on" : "")} onClick={() => setView("daily")}>📝 Daily</button>
         </div>
         <a className="hbtn" href="/bibliotheque" title="Bibliothèque : 80 articles, vidéos et rapports">📚 Articles</a>
         <button className={"hbtn" + (convo ? " active" : "")} onClick={toggleConvo} title="Conversation mains libres">🎙️ {convo ? "ON" : "Voix"}</button>
@@ -341,7 +387,7 @@ export default function Hmida() {
           )}
           {joke && <div className="joke">✦ {joke}</div>}
         </div>
-      ) : (
+      ) : view === "chat" ? (
         <>
           <div className="modebar">
             {MODES.map((m) => (
@@ -383,6 +429,7 @@ export default function Hmida() {
                         <button onClick={(e) => createDoc("script", m, e)}>🎬 Script</button>
                         <button onClick={(e) => createDoc("tache", m, e)}>✅ Tâche</button>
                         <button onClick={(e) => createDoc("decision", m, e)}>🧠 Décision</button>
+                        <button onClick={(e) => createDoc("memoire", m, e)}>💾 Mémoriser</button>
                       </div>
                     )}
                     {m.notionUsed === false && m.raw && (
@@ -419,6 +466,33 @@ export default function Hmida() {
             </div>
           </div>
         </>
+      ) : (
+        <div className="cockpit">
+          <div className="ck-hero">
+            <div className="ck-hello">📝 Daily → décisions</div>
+          </div>
+          <p className="daily-intro">Colle ou dicte le compte-rendu du daily. Hmida en extrait les <b>décisions</b> et les <b>tâches</b> (avec responsable), et les écrit directement dans Notion.</p>
+          <textarea className="daily-ta" value={daily} onChange={(e) => setDaily(e.target.value)} placeholder="Notes du daily, ou clique 🎤 Dicter…" />
+          <div className="daily-actions">
+            <button className={"mic" + (dailyListening ? " on" : "")} onClick={dailyListening ? stopDictateDaily : dictateDaily}>{dailyListening ? "● stop" : "🎤 Dicter"}</button>
+            <button className="daily-go" disabled={dailyBusy || !daily.trim()} onClick={captureDaily}>{dailyBusy ? "Capture…" : "Capter → Notion"}</button>
+            {daily && <button className="daily-clear" onClick={() => { setDaily(""); setDailyRes(null); }}>Effacer</button>}
+          </div>
+          {dailyRes && dailyRes.error && <div className="lib-err" style={{ color: "#B0452F" }}>{dailyRes.error}</div>}
+          {dailyRes && !dailyRes.error && (
+            <div className="daily-res">
+              {dailyRes.resume && <div className="ck-brief"><div className="ck-brief-h">Résumé</div><p>{dailyRes.resume}</p></div>}
+              {(dailyRes.created || []).map((c, i) => (
+                <div key={i} className="daily-item">
+                  <span className="daily-type">{c.type}</span>
+                  <span className="daily-titre">{c.titre}</span>
+                  {c.ok && c.url ? <a className="chip" href={c.url} target="_blank" rel="noreferrer">ouvrir ↗</a> : <span style={{ color: "#B0452F", fontSize: ".7rem" }}>échec</span>}
+                </div>
+              ))}
+              {(!dailyRes.created || !dailyRes.created.length) && <div className="ck-empty">Aucune décision ni tâche détectée.</div>}
+            </div>
+          )}
+        </div>
       )}
     </div>
   );
