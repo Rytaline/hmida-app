@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { notionSearch, notionPageText } from "../../../lib/notion";
 import { buildDashboard } from "../../../lib/data";
+import { wantsLibrary, libraryDigest } from "../../../lib/library";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -73,10 +74,11 @@ export async function POST(req) {
   let sources = [];
   let context = "";
   if (!inspiration) try {
-    // Dashboard et recherche lancés en même temps
-    const [dash, searchResults] = await Promise.all([
+    // Dashboard, recherche sémantique et bibliothèque documentaire lancés en même temps
+    const [dash, searchResults, libDigest] = await Promise.all([
       buildDashboard(q).catch(() => ""),
       notionSearch(q, 6).catch(() => []),
+      wantsLibrary(q) ? libraryDigest(q).catch(() => "") : Promise.resolve(""),
     ]);
     sources = searchResults;
     // Lecture des 3 premières pages en parallèle
@@ -90,6 +92,7 @@ export async function POST(req) {
     const parts = fetched.filter(Boolean);
     const blocks = [];
     if (dash) blocks.push(dash);
+    if (libDigest) blocks.push(libDigest);
     if (parts.length) blocks.push("CONTEXTE (Notion) :\n" + parts.join("\n\n"));
     if (blocks.length) context = blocks.join("\n\n") + "\n\n";
   } catch (_) {}
