@@ -127,7 +127,18 @@ export default function Hmida() {
     fetch("/api/quote").then((r) => r.json()).then((d) => { if (d && d.quote) setQuote(d); }).catch(() => {});
     fetch("/api/joke").then((r) => r.json()).then((d) => { if (d && d.joke) setJoke(d.joke); }).catch(() => {});
     fetch("/api/cockpit").then((r) => r.json()).then((d) => setCockpit(d)).catch(() => setCockpit({ error: true }));
-    fetch("/api/brief").then((r) => r.json()).then((d) => { setBrief((d && d.brief) || ""); setBriefBusy(false); }).catch(() => setBriefBusy(false));
+    // Brief : cache 1×/jour côté navigateur (instantané + économise l'API).
+    const jour = new Date().toISOString().slice(0, 10);
+    let briefCache = null;
+    try { const raw = localStorage.getItem("hmida_brief"); if (raw) { const o = JSON.parse(raw); if (o && o.date === jour) briefCache = o.brief; } } catch (_) {}
+    if (briefCache !== null) { setBrief(briefCache); setBriefBusy(false); }
+    else {
+      fetch("/api/brief").then((r) => r.json()).then((d) => {
+        const b = (d && d.brief) || "";
+        setBrief(b); setBriefBusy(false);
+        try { localStorage.setItem("hmida_brief", JSON.stringify({ date: jour, brief: b })); } catch (_) {}
+      }).catch(() => setBriefBusy(false));
+    }
   }, []);
 
   function push(m) { setMsgs((prev) => [...prev, m]); }
