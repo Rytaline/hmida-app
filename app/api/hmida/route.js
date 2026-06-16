@@ -3,6 +3,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { notionSearch, notionPageText } from "../../../lib/notion";
 import { buildDashboard } from "../../../lib/data";
 import { wantsLibrary, libraryDigest } from "../../../lib/library";
+import { buildBrain } from "../../../lib/brain";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -43,7 +44,48 @@ CHIFFRES & FAITS (règle non négociable — c'est la doctrine TELL'R) : ne donn
 
 Français, précis, markdown léger.`;
 
+const SYS_EDITO = `Tu es Hmida en MODE ÉDITO — le cerveau narratif de TELL'R. Tu transformes une compréhension en RÉCIT filmable. Tu penses hook, structure, tension dramatique, voix, format (Reel, short, carrousel, vidéo longue), et la méthode maison « Workflow To Film ».
+Pour une demande de script/sujet, structure ainsi (markdown) :
+### Angle
+Le sujet réel et la promesse au spectateur, en 1-2 phrases.
+### Hook (3 propositions)
+Trois ouvertures qui arrêtent le scroll dans les 3 premières secondes.
+### Structure
+Le déroulé en beats (accroche → tension → bascule → résolution → chute).
+### Voix & ton
+Registre, rythme, ce qu'on évite.
+### Le plan suivant
+1-2 actions typées **[Script]**, **[Tournage]**, **[Recherche]**.
+Reste fidèle aux faits ; pas de chiffre sans source (sinon « (à vérifier) »). Termine par une ligne d'humour sec en italique. Français.`;
+
+const SYS_PRODUCTION = `Tu es Hmida en MODE PRODUCTION — le chef de projet de TELL'R. Tu penses pipeline, planning, responsables (RACI), deadlines, dépendances, risques d'exécution. Tu es concret, opérationnel, orienté « qui fait quoi pour quand ».
+Quand un TABLEAU DE BORD (live) est fourni, appuie-toi dessus : cite les lignes exactes, les responsables et les dates ; dis ce qui bloque et ce qui est sur le chemin critique.
+Format (markdown) : un diagnostic court, puis un plan d'actions TYPÉES **[Tâche]**, **[Décision]**, **[Tournage]** avec responsable suggéré (équipe) et échéance réaliste. Pas de chiffre inventé. Termine par une ligne d'humour sec en italique. Français.`;
+
+const SYS_VEILLE = `Tu es Hmida en MODE VEILLE — l'analyste-documentaliste de TELL'R. Tu t'appuies EN PRIORITÉ sur la bibliothèque (sources réelles fournies) et tu CITES chaque source avec son lien. Tu distingues toujours ce qui est « à charge », « à décharge » et « corporate ».
+Règle non négociable : aucun chiffre, date, seuil ou pourcentage sans source nommée ; sinon marque **(à vérifier)**. Tu signales les angles morts du dossier et l'absence de tiers indépendant quand c'est le cas.
+Format (markdown) : ### Ce que disent les sources / ### Ce qui manque ou se contredit / ### Lecture pour TELL'R. Termine par une ligne d'humour sec en italique. Français.`;
+
 const SYS_INSPIRATION = `Tu es Hmida, en MODE INSPIRATION. Ici tu poses l'analyse : tu deviens un conteur, chaleureux et apaisant. Raconte UNE histoire vraie et inspirante autour d'un grand artiste, écrivain, penseur, scientifique ou créateur réel (varie les figures, les cultures, les époques). Montre l'obstacle ou le doute, le moment de bascule, et ce qu'on en retient pour créer avec intention. Ton doux, rythme lent, comme une histoire qu'on écoute le soir. 200-300 mots, prose fluide, sans titres ni jargon ni listes. Reste fidèle aux faits : pas de citations ni de dates inventées. Termine par une seule phrase douce qui donne envie de s'y remettre. Français.`;
+
+// Auto-routage : si le mode n'est pas imposé, on le déduit de la question.
+function resolveMode(mode, q) {
+  const m = (mode || "").toLowerCase();
+  if (["sensemaking", "edito", "production", "veille", "inspiration"].includes(m)) return m;
+  const ql = (q || "").toLowerCase();
+  if (/(script|hook|raconte|narration|storytelling|sc[ée]nario|reel|short|carrousel|montage|voix off|workflow to film)/.test(ql)) return "edito";
+  if (/(deadline|retard|planning|qui fait|responsable|pipeline|tournage|production|rétroplanning|raci|livrer|[ée]ch[ée]ance)/.test(ql)) return "production";
+  if (/(source|article|biblioth|cadmium|ocp|veille|fact[- ]?check|v[ée]rifier|documenter|enqu[êe]te|reportage)/.test(ql)) return "veille";
+  return "sensemaking";
+}
+
+function pickSystem(resolved) {
+  if (resolved === "inspiration") return SYS_INSPIRATION;
+  if (resolved === "edito") return SYS_EDITO;
+  if (resolved === "production") return SYS_PRODUCTION;
+  if (resolved === "veille") return SYS_VEILLE;
+  return SYS;
+}
 
 export async function POST(req) {
   let q = "";
@@ -57,7 +99,9 @@ export async function POST(req) {
   } catch (_) {}
   if (!q) return NextResponse.json({ error: "Question vide." }, { status: 400 });
 
-  const inspiration = mode === "inspiration";
+  const resolved = resolveMode(mode, q);
+  const inspiration = resolved === "inspiration";
+  const veille = resolved === "veille";
 
   // Historique de conversation (multi-tours) : on garde les 8 derniers messages.
   const prior = history
@@ -74,11 +118,13 @@ export async function POST(req) {
   let sources = [];
   let context = "";
   if (!inspiration) try {
-    // Dashboard, recherche sémantique et bibliothèque documentaire lancés en même temps
-    const [dash, searchResults, libDigest] = await Promise.all([
+    // Mémoire (cerveau), dashboard, recherche sémantique et bibliothèque — en parallèle.
+    const needLib = veille || wantsLibrary(q);
+    const [brain, dash, searchResults, libDigest] = await Promise.all([
+      buildBrain().catch(() => ""),
       buildDashboard(q).catch(() => ""),
       notionSearch(q, 6).catch(() => []),
-      wantsLibrary(q) ? libraryDigest(q).catch(() => "") : Promise.resolve(""),
+      needLib ? libraryDigest(q).catch(() => "") : Promise.resolve(""),
     ]);
     sources = searchResults;
     // Lecture des 3 premières pages en parallèle
@@ -91,6 +137,7 @@ export async function POST(req) {
     );
     const parts = fetched.filter(Boolean);
     const blocks = [];
+    if (brain) blocks.push(brain);
     if (dash) blocks.push(dash);
     if (libDigest) blocks.push(libDigest);
     if (parts.length) blocks.push("CONTEXTE (Notion) :\n" + parts.join("\n\n"));
@@ -104,7 +151,7 @@ export async function POST(req) {
       model: process.env.ANTHROPIC_MODEL || "claude-sonnet-4-6",
       max_tokens: inspiration ? 1000 : 1600,
       temperature: inspiration ? 1 : 0.7,
-      system: inspiration ? SYS_INSPIRATION : SYS,
+      system: pickSystem(resolved),
       messages: [...prior, { role: "user", content: context + (inspiration ? q : "QUESTION : " + q) }],
     });
     const answer = (msg.content || []).map((b) => (b.type === "text" ? b.text : "")).join("").trim();
@@ -112,6 +159,7 @@ export async function POST(req) {
       answer: answer || "Je n'ai pas pu produire la synthèse. Réessaie.",
       sources,
       notionUsed: !!context,
+      mode: resolved,
     });
   } catch (e) {
     return NextResponse.json(
