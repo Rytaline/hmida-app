@@ -1,6 +1,6 @@
 export const metadata = {
-  title: "HMIDA 1.1 — Compagnon TELL'R",
-  description: "Hmida ne demande pas « que veux-tu publier ? » mais « qu'essayons-nous de comprendre ? »",
+  title: "HMIDA — Veille & Riposte · Groupe OCP",
+  description: "Hub de Monitoring, d'Intelligence, de Défense & d'Anticipation — au service du groupe OCP.",
 };
 
 export default function RootLayout({ children }) {
